@@ -22,6 +22,9 @@ const chainIds = {
   mainnet: 1,
   rinkeby: 4,
   ropsten: 3,
+  ost1414: 1414,
+  ost_testnet1406: 1406,
+  ost_testnet1407: 1407,
 };
 
 // Ensure that we have all the environment variables we need.
