@@ -2,8 +2,13 @@
 // Copyright 2021 Mosaic Labs UG, Berlin
 pragma solidity ^0.8.0;
 
-import "hardhat/console.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
+/**
+ * @title Raffle contract for NFTs
+ * @author Benjamin Bollen <ben@mosaiclabs.eu>
+ */
 contract Raffle {
 
     /* Constants */
@@ -68,9 +73,37 @@ contract Raffle {
       Cancelled
     }
 
+    /* Structs */
+
+    /**
+     * Raffle holds essential data and references for the raffle.
+     */
+    struct RaffleData {
+      // ChainId EIP-155 of where the raffle is distributed
+      uint256 chaindId;
+      // Metadata contract on chain with chainId for indexing
+      // all valid raffle tickets
+      address metadata;
+      // Organiser address who initiated organises the raffle
+      address organiser;
+      // Status enum of raffle
+      RaffleStatus status;
+      // Reward ERC721 NFT token contract
+      IERC721 rewardToken;
+    }
+
     /* Storage */
 
+    /**
+     * ERC20 token contract used for mechanics.
+     * On Ethereum mainnet set to OST @ 0x2c4e8f2d746113d0696ce89b35f0d8bf88e0aeca
+     */
+    IERC20 public token;
 
+    /**
+     * Raffles stores essential data and references for the active raffles.
+     */
+    mapping(uint256 => RaffleData) public raffles;
 
     /* Constructor */
 

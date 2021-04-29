@@ -1,12 +1,11 @@
 {
-  "name": "@paulrberg/solidity-template",
-  "description": "Setup for writing Solidity smart contracts",
-  "version": "1.0.0",
+  "name": "@openst/nft-raffle",
+  "description": "A verifiably honest raffle for NFT rewards",
+  "version": "0.1.0",
   "author": {
-    "name": "Paul Razvan Berg",
-    "url": "https://paulrberg.com"
+    "name": "Benjamin Bollen",
+    "email": "ben@mosaiclabs.eu"
   },
-  "dependencies": {},
   "devDependencies": {
     "@commitlint/cli": "^9.1.2",
     "@commitlint/config-conventional": "^9.1.2",
@@ -14,6 +13,7 @@
     "@ethersproject/bignumber": "^5.1.1",
     "@nomiclabs/hardhat-ethers": "^2.0.2",
     "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "@openzeppelin/contracts": "^4.0.0",
     "@typechain/ethers-v5": "^5.0.0",
     "@typechain/hardhat": "^1.0.1",
     "@types/chai": "^4.2.13",
@@ -52,7 +52,6 @@
   "keywords": [
     "blockchain",
     "ethereum",
-    "hardhat",
     "smart-contracts",
     "solidity"
   ],
