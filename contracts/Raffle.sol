@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+// import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 /**
  * @title Raffle contract for NFTs
@@ -113,10 +114,26 @@ contract Raffle {
     /** Index counts the number of raffles created */
     uint256 public index;
 
+    /** Reward tokenIds keeps a record of all the ERC721 tokenIds
+     * for each raffle index.
+    * Note that each raffle has a specified ERC721 address.
+     */
+    mapping(uint256 => uint256[]) public _rewardTokenIds;
+
     /**
      * Raffles stores essential data and references for the active raffles.
      */
     mapping(uint256 => RaffleData) public raffles;
+
+    /* Modifiers */
+
+    modifier isInCreationPhase(uint256 _index) {
+        require(
+            raffles[_index].status == RaffleStatus.Created,
+            "Raffle must be created and not yet distributed."
+        );
+        _;
+    }
 
     /* Constructor */
 
@@ -134,8 +151,12 @@ contract Raffle {
         uint256 _chainId,
         address _metadata,
         IERC721 _rewardToken,
+        uint256[] calldata _tokenIds,
         uint256 _weight
-    ) external returns (uint256 index_) {
+    )
+        external
+        returns (uint256 index_)
+    {
         require(
             _chainId != uint256(0),
             "ChainId provided cannot be zero."
@@ -160,7 +181,14 @@ contract Raffle {
         // Transfer the weight in OST to the raffle contract
         token.transferFrom(msg.sender, address(this), _weight);
 
-        // initiate new raffle data
+        // Transfer all the NFT rewards into the raffle contract
+        // Note, for simplicity this is done during creation, but can be altered
+        for (uint64 i = 0; i < _tokenIds.length; i++ ) {
+
+            _rewardToken.transferFrom(msg.sender, address(this), _tokenIds[i]);
+        }
+
+        // Initiate new raffle data
         RaffleData storage raffle = raffles[index_];
 
         raffle.organiser = msg.sender;
@@ -173,4 +201,33 @@ contract Raffle {
         return index_;
     }
 
+    // function addRewards(
+    //     uint256 _index,
+    //     uint256[] _ids
+    // )
+    //     external
+    //     onlyOrganiser(_index)
+    // {
+
+    // }
+
+    // /**
+    //  * @dev Whenever an {IERC721} `tokenId` token is transferred to this contract via {IERC721-safeTransferFrom}
+    //  * by `operator` from `from`, this function is called.
+    //  *
+    //  * It must return its Solidity selector to confirm the token transfer.
+    //  * If any other value is returned or the interface is not implemented by the recipient, the transfer will be reverted.
+    //  *
+    //  * The selector can be obtained in Solidity with `IERC721.onERC721Received.selector`.
+    //  */
+    // function onERC721Received(
+    //     address operator,
+    //     address from,
+    //     uint256 tokenId,
+    //     bytes calldata data
+    // )
+    //     external returns (bytes4)
+    // {
+    //     return IERC721(this).onERC721Received.selector;
+    // }
 }
