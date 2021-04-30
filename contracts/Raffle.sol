@@ -118,7 +118,7 @@ contract Raffle {
      * for each raffle index.
     * Note that each raffle has a specified ERC721 address.
      */
-    mapping(uint256 => uint256[]) public _rewardTokenIds;
+    mapping(uint256 => uint256[]) public rewardTokenIds;
 
     /**
      * Raffles stores essential data and references for the active raffles.
@@ -126,6 +126,14 @@ contract Raffle {
     mapping(uint256 => RaffleData) public raffles;
 
     /* Modifiers */
+
+    modifier onlyOrganiser(uint256 _index) {
+        require(
+            raffles[_index].organiser == msg.sender,
+            "Only organiser can call this function."
+        );
+        _;
+    }
 
     modifier isInCreationPhase(uint256 _index) {
         require(
@@ -181,10 +189,13 @@ contract Raffle {
         // Transfer the weight in OST to the raffle contract
         token.transferFrom(msg.sender, address(this), _weight);
 
+        uint256[] storage newTokenIds = rewardTokenIds[index_];
+
         // Transfer all the NFT rewards into the raffle contract
         // Note, for simplicity this is done during creation, but can be altered
         for (uint64 i = 0; i < _tokenIds.length; i++ ) {
-
+            // store the tokenIds that are being assigned to the raffle
+            newTokenIds.push(_tokenIds[i]);
             _rewardToken.transferFrom(msg.sender, address(this), _tokenIds[i]);
         }
 
@@ -201,6 +212,34 @@ contract Raffle {
         return index_;
     }
 
+    /**
+     * Cancel can be called by the organiser of a raffle, but only while
+     * the status of the raffle is Created, not yet Distributed.
+     * On cancelling, the tokenIds the raffle contract owns for this raffle
+     * are transferred to the organiser address.
+     */
+    function cancel(
+        uint256 _index
+    )
+        external
+        onlyOrganiser(_index)
+        isInCreationPhase(_index)
+    {
+        raffles[_index].status = RaffleStatus.Cancelled;
+
+        IERC721 raffleRewardToken = raffles[_index].rewardToken;
+        uint256[] storage associatedTokenIds = rewardTokenIds[_index];
+
+        // transfer all tokenIds to organiser
+        for (uint256 i = 0; i < associatedTokenIds.length; i++) {
+            raffleRewardToken.transferFrom(
+                address(this),
+                msg.sender,
+                associatedTokenIds[i]);
+        }
+
+        delete rewardTokenIds[_index];
+    }
     // function addRewards(
     //     uint256 _index,
     //     uint256[] _ids
