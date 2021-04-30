@@ -41,14 +41,14 @@ contract Raffle {
       Created,
 
       /**
-       * Distributed. All metadata and all valid transactions
-       * that constitute the raffle tickets have been committed.
+       * OrganiserPrecommitted. All metadata and all valid transactions
+       * that constitute the raffle tickets have been included into blocks.
        * Indexers can compute the precommit root of the raffle.
        * The initial precommit must be presented by the organiser
        * of the raffle.
        * Afterwards competing precommits can be presented.
        */
-      Distributed,
+      OrganiserPrecommitted,
 
       /**
        * Precommitted. Wait for future entropy from Ethereum mainnet.
@@ -213,12 +213,12 @@ contract Raffle {
     }
 
     /**
-     * Cancel can be called by the organiser of a raffle, but only while
+     * Cancel raffle can be called by the organiser of a raffle, but only while
      * the status of the raffle is Created, not yet Distributed.
      * On cancelling, the tokenIds the raffle contract owns for this raffle
      * are transferred to the organiser address.
      */
-    function cancel(
+    function cancelRaffle(
         uint256 _index
     )
         external
@@ -240,6 +240,32 @@ contract Raffle {
 
         delete rewardTokenIds[_index];
     }
+
+    function proposePrecommit(
+        uint256 _index,
+        bytes32 _precommit
+    )
+        external
+        onlyOrganiser(_index)
+        isInCreationPhase(_index)
+    {
+        require(
+            _precommit != bytes32(0),
+            "Precommit cannot be zero bytes."
+        );
+
+        raffles[_index].status = RaffleStatus.OrganiserPrecommitted;
+
+        // continue
+    }
+
+    // function challengePrecommit(
+    //     uint256 _index,
+    //     bytes32 _precommit
+    // )
+    //     external
+
+
     // function addRewards(
     //     uint256 _index,
     //     uint256[] _ids
