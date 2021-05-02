@@ -2,8 +2,9 @@
 // Copyright 2021 Mosaic Labs UG, Berlin
 pragma solidity ^0.8.0;
 
+import "./IERC20Burnable.sol";
+
 import "hardhat/console.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 // import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
@@ -50,51 +51,56 @@ contract Raffle {
      * Raffle status enum
      */
     enum RaffleStatus {
-      /**
-       * Raffle created. NFT rewards can be added, or taken back by organiser,
-       * raffle metadata and data is collected on OST chain.
-       */
-      Created,
+        /**
+        * Raffle created. NFT rewards can be added, or taken back by organiser,
+        * raffle metadata and data is collected on OST chain.
+        */
+        Created,
 
-      /**
-       * OrganiserPrecommitted. All metadata and all valid transactions
-       * that constitute the raffle tickets have been included into blocks.
-       * Indexers can compute the precommit root of the raffle.
-       * The initial precommit must be presented by the organiser
-       * of the raffle.
-       * Afterwards competing precommits can be presented.
-       */
-      OrganiserPrecommitted,
+        /**
+        * OrganiserPrecommitted. All metadata and all valid transactions
+        * that constitute the raffle tickets have been included into blocks.
+        * Indexers can compute the precommit root of the raffle.
+        * The initial precommit must be presented by the organiser
+        * of the raffle.
+        * Afterwards competing precommits can be presented.
+        */
+        OrganiserPrecommitted,
 
-      /**
-       * Precommitted. Wait for future entropy from Ethereum mainnet.
-       */
-      Precommitted,
+        /**
+        * Precommitted. Wait for future entropy from Ethereum mainnet.
+        */
+        Precommitted,
 
-      /*
-       * Drawn. With new entropy provided by a sequence of Ethereum blockhashes
-       * the raffle is now decided. To verify the winners, the elected raffle
-       * tickets can now be submitted.
-       */
-      Drawn,
+        /*
+        * Drawn. With new entropy provided by a sequence of Ethereum blockhashes
+        * the raffle is now decided. To verify the winners, the elected raffle
+        * tickets can now be submitted.
+        */
+        Drawn,
 
-      /**
-       * Cooled down. The elected raffle tickets have been presented, and
-       * the beneficiary addresses associated with the elected tickets
-       * can be revealed.
-       */
-      CooledDown,
+        /**
+        * Cooled down. The elected raffle tickets have been presented, and
+        * the beneficiary addresses associated with the elected tickets
+        * can be revealed.
+        */
+        CooledDown,
 
-      /**
-       * Awarded. All rewards have been awarded to the beneficiary addresses.
-       * This raffle is successfully completed.
-       */
-      Awarded,
+        /**
+        * Awarded. All rewards have been awarded to the beneficiary addresses.
+        * This raffle is successfully completed.
+        */
+        Awarded,
 
-      /**
-       * Cancelled. The raffle was cancelled before distribution completed.
-       */
-      Cancelled
+        /**
+        * Cancelled. The raffle was cancelled before distribution completed.
+        */
+        Cancelled,
+
+        /**
+         * Proposed precommit was challenged, and raffle handed over to arbiter.
+         */
+        Challenged
     }
 
     /* Structs */
@@ -125,7 +131,12 @@ contract Raffle {
      * ERC20 token contract used for mechanics.
      * On Ethereum mainnet set to OST @ 0x2c4e8f2d746113d0696ce89b35f0d8bf88e0aeca
      */
-    IERC20 public token;
+    IERC20Burnable public token;
+
+    /**
+     * Arbiter is designated to resolve the precommit if the precommit got challenged.
+     */
+    address public arbiter;
 
     /** Index counts the number of raffles created */
     uint256 public index;
@@ -146,12 +157,23 @@ contract Raffle {
      * when raffle status is
      *  - OrganiserPrecommitted, time window is set to blocknumber + CHALLENGE_WINDOW
      *    after this the raffle can become precommitted.
-     *    On each challenger precommit the time window is restored.
-     *    When a vote is cast the time window is extended relative to current block number.
+     *    During this window the precommit can be challenged and the decision
+     *    is handed over to the arbiter.
      *  - Precommitted. The time window is set to allow entropy from Ethereum
      *    to happen after a root has been precomitted.
      */
     mapping(uint256 => uint256) public timeWindows;
+
+    /**
+     * Precommits stores the precommit as proposed by the raffle organiser.
+     */
+    mapping(uint256 => bytes32) public precommits;
+
+    /**
+     * Challengers keep the addresses of the challenger if a precommit
+     * is challenged.
+     */
+    mapping(uint256 => address) public challengers;
 
     /* Modifiers */
 
@@ -163,20 +185,45 @@ contract Raffle {
         _;
     }
 
-    modifier isInCreationPhase(uint256 _index) {
+    modifier onlyArbiter() {
         require(
-            raffles[_index].status == RaffleStatus.Created,
-            "Raffle must be created and not yet distributed."
+            msg.sender == arbiter,
+            "Only arbiter can call this function."
         );
         _;
     }
+
+    modifier isInCreationPhase(uint256 _index) {
+        require(
+            raffles[_index].status == RaffleStatus.Created,
+            "Raffle must be created and not yet precommited."
+        );
+        _;
+    }
+
+    modifier isInChallengePhase(uint256 _index) {
+        require(
+            raffles[_index].status == RaffleStatus.OrganiserPrecommitted,
+            "Raffle must have a precommit proposed."
+        );
+        _;
+    }
+
+    modifier hasBeenChallenged(uint256 _index) {
+        require(
+            raffles[_index].status == RaffleStatus.Challenged,
+            "Raffle must have been challenged."
+        );
+        _;
+    }
+
 
     /* Constructor */
 
     /**
      * On construction the token contract for the raffle mechanics must be set.
      */
-    constructor(IERC20 _token) {
+    constructor(IERC20Burnable _token) {
         console.log("Deploying raffle contract with token ", address(_token));
         token = _token;
     }
@@ -284,26 +331,114 @@ contract Raffle {
 
         raffles[_index].status = RaffleStatus.OrganiserPrecommitted;
 
+        // store the proposed precommit by the organiser
+        precommits[_index] = _precommit;
+
         // set time window to expire after challenge window;
         timeWindows[_index] = block.number + CHALLENGE_WINDOW;
     }
 
-    // function challengePrecommit(
-    //     uint256 _index,
-    //     bytes32 _precommit
-    // )
-    //     external
+    /**
+     * ChallengePrecommit allows anyone to challenge the precommit
+     * presented by the raffle organiser. The challenger must deposit
+     * the same weight in the token.
+     * The final decision on the precommit is handed over to the arbiter.
+     */
+    function challengePrecommit(
+        uint256 _index
+    )
+        external
+        isInChallengePhase(_index)
+    {
+        raffles[_index].status = RaffleStatus.Challenged;
 
+        // Pull in the same amount of token as set in weight
+        token.transferFrom(msg.sender, address(this),
+            raffles[_index].weight);
 
-    // function addRewards(
-    //     uint256 _index,
-    //     uint256[] _ids
-    // )
-    //     external
-    //     onlyOrganiser(_index)
-    // {
+        challengers[_index] = msg.sender;
+    }
 
-    // }
+    /**
+     * Arbitrate in favour of challenger, and present final precommit.
+     * Half of weight put forward by organiser is burnt;
+     * Half of weight of organiser is awarded to challenger;
+     * Challengers' weight returned to challenger.
+     */
+    function arbitrateRaffeForChallenger(
+        uint256 _index,
+        bytes32 _decision
+    )
+        external
+        onlyArbiter()
+        hasBeenChallenged(_index)
+    {
+        require(
+            _decision != bytes32(0),
+            "Decision cannot be zero bytes."
+        );
+        require(
+            _decision != precommits[_index],
+            "Decision must differ from organisers precommit."
+        )
+
+        raffles[_index].status = RaffleStatus.Precommitted;
+
+        // overwrite precommit for raffle
+        precommits[_index] = _decision;
+
+        address challenger = challengers[_index];
+        delete challengers[_index];
+
+        uint256 weight = raffles[_index].weight;
+        uint256 burnAmount = weight / 2;
+        // ensure sum is exact amounts present in balance; under division errors
+        uint256 rewardAmount = 2 * weight - burnAmount;
+        // burn half the weight
+        token.burn(burnAmount);
+        // award 3/2 of weight to challenger
+        token.transfer(challenger, rewardAmount);
+    }
+
+    /**
+     * Arbitrate in favour of organisers precommit.
+     * Weight put forward by challenger is burnt;
+     * weight of organiser is returned to organiser.
+     */
+    function arbitrateRaffeForOrganiser(
+        uint256 _index
+    )
+        external
+        onlyArbiter()
+        hasBeenChallenged(_index)
+    {
+        raffles[_index].status = RaffleStatus.Precommitted;
+
+        delete challengers[_index];
+
+        uint256 weight = raffles[_index].weight;
+        // burn the weight from challenger
+        token.burn(weight);
+        // reimburse weight to organiser
+        token.transfer(raffles[_index].organiser, weight);
+    }
+
+    function precommit(
+        uint256 _index
+    )
+        external
+        isInChallengePhase(_index)
+    {
+        require(
+            timeWindows[_index] <= block.number,
+            "Minimal challenger period must have expired before precommitting."
+        );
+
+        raffle[_index].status = RaffleStatus.Precommitted;
+
+        //continue
+    }
+
 
     // /**
     //  * @dev Whenever an {IERC721} `tokenId` token is transferred to this contract via {IERC721-safeTransferFrom}
