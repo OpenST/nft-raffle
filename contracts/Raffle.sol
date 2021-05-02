@@ -25,19 +25,17 @@ contract Raffle {
     uint256 public constant CHALLENGE_WINDOW = uint256(300);
 
     /**
-     * VOTE_EXTENTION_WINDOW for each vote cast on a precommit,
-     * the current window is extended with additional blocks.
-     * Set to 36 additional seconds (3 times 12 second blocks).
+     * ENTROPY_WINDOW waits for some blocks to collect future block hashes
+     * as a randomizer of the raffle.
      */
-    uint256 public constant VOTE_EXTENTION_WINDOW = uint256(3);
+    uint256 public constant ENTROPY_WINDOW = uint256(20);
+
     /**
      * NOMINATION_COOLDOWN sets the number of blocks during which
      * entries can be proposed to be sorted as closest to target.
      * Set to 10 minutes (50 times 12 second blocks).
      */
     uint256 public constant NOMINATION_COOLDOWN = uint256(50);
-
-
 
     /**
      * MINIMUM_WEIGHT sets the minimum amount of mechanics token
@@ -380,9 +378,12 @@ contract Raffle {
         require(
             _decision != precommits[_index],
             "Decision must differ from organisers precommit."
-        )
+        );
 
         raffles[_index].status = RaffleStatus.Precommitted;
+
+        // set the future blockheight at which we can calculate a randomizer
+        timeWindows[_index] = block.number + ENTROPY_WINDOW;
 
         // overwrite precommit for raffle
         precommits[_index] = _decision;
@@ -414,6 +415,9 @@ contract Raffle {
     {
         raffles[_index].status = RaffleStatus.Precommitted;
 
+        // set the future blockheight at which we can calculate a randomizer
+        timeWindows[_index] = block.number + ENTROPY_WINDOW;
+
         delete challengers[_index];
 
         uint256 weight = raffles[_index].weight;
@@ -431,32 +435,14 @@ contract Raffle {
     {
         require(
             timeWindows[_index] <= block.number,
-            "Minimal challenger period must have expired before precommitting."
+            "Minimal challenge period must have expired before precommitting."
         );
 
-        raffle[_index].status = RaffleStatus.Precommitted;
+        raffles[_index].status = RaffleStatus.Precommitted;
 
-        //continue
+        // set the future blockheight at which we can calculate a randomizer
+        timeWindows[_index] = block.number + ENTROPY_WINDOW;
     }
 
-
-    // /**
-    //  * @dev Whenever an {IERC721} `tokenId` token is transferred to this contract via {IERC721-safeTransferFrom}
-    //  * by `operator` from `from`, this function is called.
-    //  *
-    //  * It must return its Solidity selector to confirm the token transfer.
-    //  * If any other value is returned or the interface is not implemented by the recipient, the transfer will be reverted.
-    //  *
-    //  * The selector can be obtained in Solidity with `IERC721.onERC721Received.selector`.
-    //  */
-    // function onERC721Received(
-    //     address operator,
-    //     address from,
-    //     uint256 tokenId,
-    //     bytes calldata data
-    // )
-    //     external returns (bytes4)
-    // {
-    //     return IERC721(this).onERC721Received.selector;
-    // }
+    //continue: draw randomizer
 }
