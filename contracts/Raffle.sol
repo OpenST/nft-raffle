@@ -16,11 +16,27 @@ contract Raffle {
     /* Constants */
 
     /**
+     * CHALLENGE_WINDOW sets the minimal number of blocks during which
+     * the initial or challenger precommits can be challenged or voted upon.
+     * For each new precommit, the challenge window is restored in full.
+     * Set to 1 hour (300 times 12 second blocks).
+     */
+    uint256 public constant CHALLENGE_WINDOW = uint256(300);
+
+    /**
+     * VOTE_EXTENTION_WINDOW for each vote cast on a precommit,
+     * the current window is extended with additional blocks.
+     * Set to 36 additional seconds (3 times 12 second blocks).
+     */
+    uint256 public constant VOTE_EXTENTION_WINDOW = uint256(3);
+    /**
      * NOMINATION_COOLDOWN sets the number of blocks during which
      * entries can be proposed to be sorted as closest to target.
      * Set to 10 minutes (50 times 12 second blocks).
      */
     uint256 public constant NOMINATION_COOLDOWN = uint256(50);
+
+
 
     /**
      * MINIMUM_WEIGHT sets the minimum amount of mechanics token
@@ -124,6 +140,18 @@ contract Raffle {
      * Raffles stores essential data and references for the active raffles.
      */
     mapping(uint256 => RaffleData) public raffles;
+
+    /**
+     * TimeWindow keeps the block number for the active phase of a raffle
+     * when raffle status is
+     *  - OrganiserPrecommitted, time window is set to blocknumber + CHALLENGE_WINDOW
+     *    after this the raffle can become precommitted.
+     *    On each challenger precommit the time window is restored.
+     *    When a vote is cast the time window is extended relative to current block number.
+     *  - Precommitted. The time window is set to allow entropy from Ethereum
+     *    to happen after a root has been precomitted.
+     */
+    mapping(uint256 => uint256) public timeWindows;
 
     /* Modifiers */
 
@@ -256,7 +284,8 @@ contract Raffle {
 
         raffles[_index].status = RaffleStatus.OrganiserPrecommitted;
 
-        // continue
+        // set time window to expire after challenge window;
+        timeWindows[_index] = block.number + CHALLENGE_WINDOW;
     }
 
     // function challengePrecommit(
