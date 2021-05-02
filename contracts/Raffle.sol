@@ -31,6 +31,12 @@ contract Raffle {
     uint256 public constant ENTROPY_WINDOW = uint256(20);
 
     /**
+     * ENTROPY_LENGTH takes three consecutive block hashes to create
+     * a randomizer for the raffle.
+     */
+    uint256 public constant ENTROPY_LENGTH = uint256(3);
+
+    /**
      * NOMINATION_COOLDOWN sets the number of blocks during which
      * entries can be proposed to be sorted as closest to target.
      * Set to 10 minutes (50 times 12 second blocks).
@@ -61,7 +67,7 @@ contract Raffle {
         * Indexers can compute the precommit root of the raffle.
         * The initial precommit must be presented by the organiser
         * of the raffle.
-        * Afterwards competing precommits can be presented.
+        * Afterwards the precommit can be challenged and arbiter is left to decide.
         */
         OrganiserPrecommitted,
 
@@ -215,6 +221,13 @@ contract Raffle {
         _;
     }
 
+    modifier isInPrecommittedPhase(uint256 _index) {
+        require(
+            raffles[_index].status == RaffleStatus.Precommitted,
+            "Raffle must have been precommitted."
+        );
+        _;
+    }
 
     /* Constructor */
 
@@ -427,6 +440,10 @@ contract Raffle {
         token.transfer(raffles[_index].organiser, weight);
     }
 
+    /**
+     * Precommit can be called when the challenge period of a proposed precommit
+     * has passed. It then starts the entropy window to randomize the raffle.
+     */
     function precommit(
         uint256 _index
     )
@@ -444,5 +461,27 @@ contract Raffle {
         timeWindows[_index] = block.number + ENTROPY_WINDOW;
     }
 
-    //continue: draw randomizer
+    /**
+     * Draw raffle once the future block hashes are known to randomize the raffle.
+     * Note that only the last 256 ethereum block hashes are available to the EVM
+     * so if too much time has passed, then the raffle must be reshuffled first.
+     */
+    function drawRaffle(
+        uint256 _index
+    )
+        external
+        isInPrecommittedPhase(_index)
+    {
+        require(
+            timeWindows[_index] < block.number,
+            "The entropy window must have passed before raffle can be drawn."
+        );
+        require(
+            timeWindows[_index] - ENTROPY_LENGTH + uint256(256) > block.number,
+            "The window for accessing the block hashes has passed."
+        );
+
+        timeWindows[_index] = block.number + NOMINATION_COOLDOWN;
+        //conitnue
+    }
 }
