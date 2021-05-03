@@ -142,6 +142,13 @@ contract Raffle {
      */
     address public arbiter;
 
+    /**
+     * ChainId restriction allows to set the contract to only accept raffles
+     * from a preset chainId. This allows the arbiter to restrict about which
+     * chains it will accept formulating an opinion over.
+     */
+    uint256 public chainIdRestriction;
+
     /** Index counts the number of raffles created */
     uint256 public index;
 
@@ -178,6 +185,11 @@ contract Raffle {
      * is challenged.
      */
     mapping(uint256 => address) public challengers;
+
+    /**
+     * Seeds stores the randomizers seeds as generated during draw.
+     */
+    mapping(uint256 => bytes32) public seeds;
 
     /* Modifiers */
 
@@ -234,9 +246,26 @@ contract Raffle {
     /**
      * On construction the token contract for the raffle mechanics must be set.
      */
-    constructor(IERC20Burnable _token) {
+    constructor(
+        IERC20Burnable _token,
+        address _arbiter,
+        uint256 _chainIdRestriction
+    ) {
+        require(
+            address(_token) != address(0),
+            "The token address cannot be the zero address."
+        );
+        require(
+            _arbiter != address(0),
+            "The arbiter address cannot be the zero address."
+        );
+
         console.log("Deploying raffle contract with token ", address(_token));
         token = _token;
+        arbiter = _arbiter;
+
+        // restriction can be zero if unrestricted
+        chainIdRestriction = _chainIdRestriction;
     }
 
     /* External Functions */
@@ -254,6 +283,11 @@ contract Raffle {
         require(
             _chainId != uint256(0),
             "ChainId provided cannot be zero."
+        );
+        require(
+            _chainId == uint256(chainIdRestriction) ||
+            chainIdRestriction == uint256(0),
+            "Arbiter will only form an opinion on the restricted chainId."
         );
         require(
             _metadata != address(0),
@@ -327,6 +361,11 @@ contract Raffle {
         delete rewardTokenIds[_index];
     }
 
+    /**
+     * Organiser can submit a proposal for the root of the raffle.
+     * It starts a challenge period where independent observers can challenge
+     * the proposed commit, leaving the final decision up to the arbiter.
+     */
     function proposePrecommit(
         uint256 _index,
         bytes32 _precommit
@@ -483,24 +522,66 @@ contract Raffle {
             "The window for accessing the block hashes has passed."
         );
 
-        bytes32 seed = hashBlockSegment(_index, beginBlock, endBlock);
+        raffles[_index].status = RaffleStatus.Drawn;
+
+        seeds[_index] = hashBlockSegment(_index, beginBlock);
 
         timeWindows[_index] = block.number + NOMINATION_COOLDOWN;
-
     }
+
+    /**
+     * Reshuffle allows the raffle to be unblocked if the access window has passed
+     * where the EVM can access the fixed blockhashes;
+     * reshuffle and draw again within (256 - ENTROPY_LENGTH) blocks window.
+     */
+    function reshuffle(
+        uint256 _index
+    )
+        external
+        isInPrecommittedPhase(_index)
+    {
+        uint256 windowPassedBlock = timeWindows[_index] + uint256(256) - ENTROPY_LENGTH;
+        require(
+            windowPassedBlock < block.number,
+            "The drawing window has not yet passed, call draw() instead."
+        );
+
+        // reset the future blockheight at which we can calculate a randomizer
+        timeWindows[_index] = block.number + ENTROPY_WINDOW;
+    }
+
+    // function nominate
+
 
     /* Private Functions */
 
+    /**
+     * hashBlockSegment will hash together a sequence of blockhashes of length
+     * ENTROPY_LENGTH starting at `_beginBlock`, additionally including
+     * the raffle index and address of raffle contract to ensure
+     * a unique seed for each raffle.
+     */
     function hashBlockSegment(
         uint256 _index,
-        uint256 _beginBlock,
-        uint256 _endBlock
+        uint256 _beginBlock
     )
         private
         view
         returns (bytes32 seed_)
     {
-        // continue
-        return bytes32(0);
+        bytes32[] memory seedGenerator = new bytes32[](ENTROPY_LENGTH);
+        for (uint256 i = 0; i < ENTROPY_LENGTH; i++) {
+            seedGenerator[i] = blockhash(_beginBlock + i);
+        }
+
+        seed_ = keccak256(
+            abi.encodePacked(
+                address(this),
+                _index,
+                seedGenerator
+            )
+        );
+
+        return seed_;
     }
 }
