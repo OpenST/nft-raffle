@@ -472,16 +472,35 @@ contract Raffle {
         external
         isInPrecommittedPhase(_index)
     {
+        uint256 endBlock = timeWindows[_index];
+        uint256 beginBlock = endBlock + uint256(1) - ENTROPY_LENGTH;
         require(
-            timeWindows[_index] < block.number,
+            endBlock < block.number,
             "The entropy window must have passed before raffle can be drawn."
         );
         require(
-            timeWindows[_index] - ENTROPY_LENGTH + uint256(256) > block.number,
+            beginBlock + uint256(256) >= block.number,
             "The window for accessing the block hashes has passed."
         );
 
+        bytes32 seed = hashBlockSegment(_index, beginBlock, endBlock);
+
         timeWindows[_index] = block.number + NOMINATION_COOLDOWN;
-        //conitnue
+
+    }
+
+    /* Private Functions */
+
+    function hashBlockSegment(
+        uint256 _index,
+        uint256 _beginBlock,
+        uint256 _endBlock
+    )
+        private
+        view
+        returns (bytes32 seed_)
+    {
+        // continue
+        return bytes32(0);
     }
 }
