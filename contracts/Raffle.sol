@@ -49,6 +49,20 @@ contract Raffle {
      */
     uint256 public constant MINIMUM_WEIGHT = uint256(10**18);
 
+    /**
+     * SENTINEL_DISTANCE set to maximum distance.
+     */
+    uint256 public constant SENTINEL_DISTANCE = uint256(
+        0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    );
+
+    /**
+     * SENTINEL_TICKETS is reserved bytes32 to identify the end of circular list.
+     */
+    bytes32 public constant SENTINEL_TICKETS = bytes32(
+        0x0000000000000000000000000000000000000000000000000000000000000001
+    );
+
     /* Enums */
 
     /**
@@ -190,6 +204,19 @@ contract Raffle {
      * Seeds stores the randomizers seeds as generated during draw.
      */
     mapping(uint256 => bytes32) public seeds;
+
+    /**
+     * Nomination count keeps a count of nominated tickets for a raffle index.
+     * The nomination count increases until it reaches the amount of tokenIds
+     * that are associated to the given raffle. This maximum is present
+     * because we only need to keep nominated tickets for each reward.
+     */
+    mapping(uint256 => uint256) public nominationCount;
+
+    /**
+     * Nominations stores the closest tickets thusfar entered into the drawn raffle.
+     */
+    mapping(uint256 => mapping(bytes32 => bytes32)) public nominations;
 
     /* Modifiers */
 
@@ -560,12 +587,57 @@ contract Raffle {
 
     function nominateTickets(
         uint256 _index,
-        bytes32[] calldata _tickets
+        bytes32[] calldata _tickets,
+        bytes32 _furtherTicket
     )
         external
         isInDrawnPhase(_index)
     {
+        require(
+            _tickets.length > 0 &&
+            _tickets.length <= rewardTokenIds[_index].length,
+            "No more tickets allowed than rewards."
+        );
+        require(
+            nominations[_index][_furtherTicket] != bytes32(0),
+            "Further ticket must be nominated."
+        );
 
+        bytes32 seed = seeds[_index];
+
+        // Set distance to further ticket
+        uint256 dFurtherTicket = SENTINEL_DISTANCE;
+        if (_furtherTicket != SENTINEL_TICKETS) {
+            dFurtherTicket = distanceToSeed(_furtherTicket, seed);
+        }
+        bytes32 furtherTicket = _furtherTicket;
+        bytes32 nearerTicket = nominations[_index][_furtherTicket];
+
+        for(uint256 i = 0; i < _tickets.length; i++) {
+            bytes32 ticket = _tickets[i];
+            require(
+                ticket != bytes32(0) &&
+                ticket != SENTINEL_TICKETS,
+                "Ticket cannot be zero bytes or sentinel bytes."
+            );
+            require(
+                nominations[_index][ticket] == bytes32(0),
+                "Ticket cannot already be nominated."
+            );
+
+            // first calculate distance
+            uint256 distanceTicket = distanceToSeed(ticket, seed);
+
+            require(
+                distanceTicket < dFurtherTicket,
+                "Ticket must be nearer than further away ticket."
+            );
+
+            while (nearerTicket != SENTINEL_TICKETS) {
+                // continue
+            }
+
+        }
     }
 
     /* Public Functions */
