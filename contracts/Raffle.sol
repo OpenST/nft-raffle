@@ -241,6 +241,14 @@ contract Raffle {
         _;
     }
 
+    modifier isInDrawnPhase(uint256 _index) {
+        require(
+            raffles[_index].status == RaffleStatus.Drawn,
+            "Raffle must have been drawn."
+        );
+        _;
+    }
+
     /* Constructor */
 
     /**
@@ -534,7 +542,7 @@ contract Raffle {
      * where the EVM can access the fixed blockhashes;
      * reshuffle and draw again within (256 - ENTROPY_LENGTH) blocks window.
      */
-    function reshuffle(
+    function reshuffleRaffle(
         uint256 _index
     )
         external
@@ -550,7 +558,33 @@ contract Raffle {
         timeWindows[_index] = block.number + ENTROPY_WINDOW;
     }
 
-    // function nominate
+    function nominateTickets(
+        uint256 _index,
+        bytes32[] calldata _tickets
+    )
+        external
+        isInDrawnPhase(_index)
+    {
+
+    }
+
+    /* Public Functions */
+
+    /**
+     * Distance to seed takes a ticket and a seed, first hashes the ticket
+     * bytes with the seed, and then calculates the XOR distance to the seed
+     * producing a randomised order over the tickets.
+     */
+    function distanceToSeed(
+        bytes32 _ticket,
+        bytes32 _seed
+    )
+        public
+        pure
+        returns (uint256 distance_)
+    {
+        distance_ = distance(shuffleTicket(_ticket, _seed), _seed);
+    }
 
 
     /* Private Functions */
@@ -581,7 +615,47 @@ contract Raffle {
                 seedGenerator
             )
         );
+    }
 
-        return seed_;
+    /**
+     * Shuffle ticket additionally randomises the bits of the tickets,
+     * even though strictly speaking the XOR distance measured from
+     * a fixed random seed, already randomises the ordering of tickets.
+     * But because we only need to hash the nominated tickets, we can
+     * additionally randomise the ticket bytes prior to checking the distance
+     * to the random seed.
+     */
+    function shuffleTicket(
+        bytes32 _ticket,
+        bytes32 _seed
+    )
+        private
+        pure
+        returns (bytes32 shuffledTicket_)
+    {
+        shuffledTicket_ = keccak256(
+            abi.encodePacked(
+                _ticket,
+                _seed
+            )
+        );
+    }
+
+    /**
+     * distance returns the XOR distance between two 32 byte values.
+     * Beyond satisfying the required distance properties,
+     * d(a, . ) is unique, making it useful to sort elements.
+     * Additionally XOR is a perfect cypher for a message and key of equal length
+     * so if `_a` is random, XOR randomises the ordering of all `_b`.
+     * Nonetheless we additionally hash the tickets to randomise their bits as well.
+     */
+    function distance(bytes32 _a, bytes32 _b)
+        private
+        pure
+        returns (uint256 distance_)
+    {
+        // return XOR(_a, _b) distance, which has the additional property
+        // that for fixed _a, the distance to _b is unique to _b.
+        distance_ = uint256(_a ^ _b);
     }
 }
