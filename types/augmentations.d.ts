@@ -2,11 +2,11 @@
 import { Fixture } from "ethereum-waffle";
 
 import { Signers } from "./";
-import { Greeter } from "../typechain/Greeter";
+import { Raffle } from "../typechain/Raffle";
 
 declare module "mocha" {
   export interface Context {
-    greeter: Greeter;
+    raffle: Raffle;
     loadFixture: <T>(fixture: Fixture<T>) => Promise<T>;
     signers: Signers;
   }

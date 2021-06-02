@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2021 Mosaic Labs UG, Berlin
-pragma solidity ^0.8.0;
+pragma solidity >=0.8.0 <0.9.0;
 
 import "./IERC20Burnable.sol";
 
@@ -384,6 +384,8 @@ contract Raffle {
 
         IERC721 raffleRewardToken = raffles[_index].rewardToken;
         uint256[] storage associatedTokenIds = rewardTokenIds[_index];
+
+        // TODO: return weight to organiser
 
         // transfer all tokenIds to organiser
         for (uint256 i = 0; i < associatedTokenIds.length; i++) {
